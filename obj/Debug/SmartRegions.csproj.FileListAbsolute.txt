@@ -10,3 +10,4 @@ C:\Users\Zak\Google Drive\TShock Mods\SmartRegions\bin\Debug\Mono.Data.Sqlite.dl
 C:\Users\Zak\Google Drive\TShock Mods\SmartRegions\obj\Debug\SmartRegions.csprojResolveAssemblyReference.cache
 C:\Users\Zak\Google Drive\TShock Mods\SmartRegions\obj\Debug\SmartRegions.dll
 C:\Users\Zak\Google Drive\TShock Mods\SmartRegions\obj\Debug\SmartRegions.pdb
+C:\Users\Zak\Google Drive\TShock Mods\SmartRegions\bin\Debug\OTAPI.dll

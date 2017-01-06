@@ -9,7 +9,7 @@ using System.IO;
 
 namespace SmartRegions
 {
-    [ApiVersion(1, 23)]
+    [ApiVersion(2, 0)]
     public class Plugin : TerrariaPlugin
     {
         List<SmartRegion> regions = new List<SmartRegion>();
@@ -160,6 +160,23 @@ namespace SmartRegions
                             }
                             else
                             {
+                                string cmdName = "";
+                                for(int i = 1; i < command.Length && command[i] != ' '; i++)
+                                {
+                                    cmdName += command[i];
+                                }
+                                Command cmd = Commands.ChatCommands.FirstOrDefault(c => c.HasAlias(cmdName));
+                                if(cmd != null && !cmd.CanRun(args.Player))
+                                {
+                                    args.Player.SendErrorMessage("You cannot create a smart region with a command you don't have permission to use yourself!");
+                                    return;
+                                }
+                                if(cmd != null && !cmd.AllowServer)
+                                {
+                                    args.Player.SendErrorMessage("Your command must be usable by the server!");
+                                    return;
+                                }
+
                                 var existingRegion = regions.FirstOrDefault(x => x.region == args.Parameters[1]);
                                 var newRegion = new SmartRegion { region = args.Parameters[1], cooldown = cooldown, command = command };
                                 if(existingRegion != null)
