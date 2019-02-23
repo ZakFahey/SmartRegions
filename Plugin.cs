@@ -9,7 +9,7 @@ using System.IO;
 
 namespace SmartRegions
 {
-    [ApiVersion(2, 0)]
+    [ApiVersion(2, 1)]
     public class Plugin : TerrariaPlugin
     {
         List<SmartRegion> regions = new List<SmartRegion>();
