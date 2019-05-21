@@ -6,6 +6,8 @@ using TShockAPI;
 using Terraria;
 using TerrariaApi.Server;
 using System.IO;
+using TShockAPI.DB;
+using Microsoft.Xna.Framework;
 
 namespace SmartRegions
 {
@@ -16,9 +18,22 @@ namespace SmartRegions
         PlayerData[] players = new PlayerData[255];
         class SmartRegion
         {
-            public string region;
+            private Region _region = null;
+
+            public string name;
             public string command;
             public double cooldown;
+            public Region region
+            {
+                get
+                {
+                    if(_region == null)
+                    {
+                        _region = TShock.Regions.GetRegionByName(name);
+                    }
+                    return _region;
+                }
+            }
         }
         struct PlayerData
         {
@@ -62,7 +77,7 @@ namespace SmartRegions
         }
         public override Version Version
         {
-            get { return new Version("1.1"); }
+            get { return new Version("1.2"); }
         }
         public override string Name
         {
@@ -89,7 +104,7 @@ namespace SmartRegions
                 {
                     var inRegion = TShock.Regions.InAreaRegionName((int)(player.X / 16), (int)(player.Y / 16));
                     var hs = new HashSet<string>(inRegion);
-                    var inSmartRegion = regions.Where(x => hs.Contains(x.region));
+                    var inSmartRegion = regions.Where(x => hs.Contains(x.name));
 
                     foreach(var region in inSmartRegion)
                     {
@@ -177,8 +192,13 @@ namespace SmartRegions
                                     return;
                                 }
 
-                                var existingRegion = regions.FirstOrDefault(x => x.region == args.Parameters[1]);
-                                var newRegion = new SmartRegion { region = args.Parameters[1], cooldown = cooldown, command = command };
+                                var existingRegion = regions.FirstOrDefault(x => x.name == args.Parameters[1]);
+                                var newRegion = new SmartRegion
+                                {
+                                    name = args.Parameters[1],
+                                    cooldown = cooldown,
+                                    command = command
+                                };
                                 if(existingRegion != null)
                                 {
                                     players[args.Player.Index].regionToReplace = newRegion;
@@ -202,7 +222,7 @@ namespace SmartRegions
                         }
                         else
                         {
-                            var region = regions.FirstOrDefault(x => x.region == args.Parameters[1]);
+                            var region = regions.FirstOrDefault(x => x.name == args.Parameters[1]);
                             if(region == null)
                             {
                                 args.Player.SendErrorMessage("No such smart region exists!");
@@ -224,7 +244,7 @@ namespace SmartRegions
                         }
                         else
                         {
-                            var region = regions.FirstOrDefault(x => x.region == args.Parameters[1]);
+                            var region = regions.FirstOrDefault(x => x.name == args.Parameters[1]);
                             if(region == null)
                             {
                                 args.Player.SendInfoMessage("That region doesn't have a command associated with it.");
@@ -241,25 +261,56 @@ namespace SmartRegions
                     break;
                 case "list":
                     {
-                        args.Player.SendInfoMessage("Smart regions ({0}):", regions.Count);
                         int pageNumber = 1;
+                        int maxDist = int.MaxValue;
                         if(args.Parameters.Count > 1)
                         {
                             int.TryParse(args.Parameters[1], out pageNumber);
                         }
-                        PaginationTools.SendPage(
-                            args.Player, pageNumber, PaginationTools.BuildLinesFromTerms(regions.ConvertAll(x => x.region)),
-                            new PaginationTools.Settings
+                        if(args.Parameters.Count > 2)
+                        {
+                            if(args.Player == TSPlayer.Server)
                             {
-                                IncludeHeader = false,
-                                FooterFormat = string.Format("Type {0}smartregion list {{0}} for more.", Commands.Specifier)
+                                args.Player.SendErrorMessage("You cannot use the distance argument if you're the server.");
+                                return;
                             }
-                        );
+                            int.TryParse(args.Parameters[2], out maxDist);
+                        }
+                        List<SmartRegion> regionList = regions;
+                        if(maxDist < int.MaxValue)
+                        {
+                            regionList = regionList
+                                .Where(r => r.region != null && Vector2.Distance(args.Player.TPlayer.position, r.region.Area.Center() * 16) < maxDist * 16)
+                                .ToList();
+                        }
+                        List<string> regionNames = regionList.Select(r => r.name).ToList();
+                        regionNames.Sort();
+
+                        if(regionNames.Count == 0)
+                        {
+                            string suffix = "";
+                            if(maxDist < int.MaxValue)
+                            {
+                                suffix = " nearby";
+                            }
+                            args.Player.SendErrorMessage($"There are no smart regions{suffix}.");
+                        }
+                        else
+                        {
+                            PaginationTools.SendPage(
+                                args.Player, pageNumber, PaginationTools.BuildLinesFromTerms(regionNames),
+                                new PaginationTools.Settings
+                                {
+                                    HeaderFormat = "Smart regions ({0}/{1}):",
+                                    FooterFormat = string.Format("Type {0}smartregion list {{0}} for more.", Commands.Specifier)
+                                }
+                            );
+                        }
                     }
                     break;
                 default:
                     {
-                        args.Player.SendInfoMessage("/smartregion sub-commands:\nadd <region name> <cooldown> <command or file>\nremove <region name>\ncheck <region name>\nlist");
+                        args.Player.SendInfoMessage("/smartregion sub-commands:\nadd <region name> <cooldown> <command or file>\nremove <region name>\ncheck <region name>\nlist [page] [max dist]");
                     }
                     break;
             }
@@ -277,7 +328,7 @@ namespace SmartRegions
                     {
                         regions.Add(new SmartRegion
                         {
-                            region = lines[i],
+                            name = lines[i],
                             command = lines[i + 1],
                             cooldown = double.Parse(lines[i + 2])
                         });
@@ -296,7 +347,7 @@ namespace SmartRegions
             {
                 foreach(var region in regions)
                 {
-                    writer.WriteLine(region.region);
+                    writer.WriteLine(region.name);
                     writer.WriteLine(region.command);
                     writer.WriteLine(region.cooldown);
                 }
@@ -311,7 +362,7 @@ namespace SmartRegions
             }
             else
             {
-                regions.RemoveAll(x => x.region == players[args.Player.Index].regionToReplace.region);
+                regions.RemoveAll(x => x.name == players[args.Player.Index].regionToReplace.name);
                 regions.Add(players[args.Player.Index].regionToReplace);
                 players[args.Player.Index].regionToReplace = null;
                 args.Player.SendSuccessMessage("Region successfully replaced!");
