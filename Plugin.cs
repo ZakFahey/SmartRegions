@@ -100,20 +100,19 @@ namespace SmartRegions
         void OnUpdate(EventArgs args)
         {
             foreach(TSPlayer player in TShock.Players)
-                if(player != null && player.Active)
+                if(player != null && NetMessage.buffer[player.Index].broadcast)
                 {
                     var inRegion = TShock.Regions.InAreaRegionName((int)(player.X / 16), (int)(player.Y / 16));
                     var hs = new HashSet<string>(inRegion);
                     var inSmartRegion = regions.Where(x => hs.Contains(x.name)).OrderByDescending(x => x.region.Z);
-                    bool applied = false;
 
+                    int regionCounter = 0;
                     foreach(var region in inSmartRegion)
                     {
-                        if((!players[player.Index].cooldowns.ContainsKey(region)
-                            || DateTime.UtcNow > players[player.Index].cooldowns[region])
-                            && (!applied || !region.region.Name.EndsWith("--")))
+                        if((regionCounter++ == 0 || !region.region.Name.EndsWith("--"))
+                            && (!players[player.Index].cooldowns.ContainsKey(region)
+                                || DateTime.UtcNow > players[player.Index].cooldowns[region]))
                         {
-                            applied = true;
                             string file = Path.Combine(TShock.SavePath, "SmartRegions", region.command);
                             if(File.Exists(file))
                             {
