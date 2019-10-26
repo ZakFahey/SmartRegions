@@ -104,12 +104,16 @@ namespace SmartRegions
                 {
                     var inRegion = TShock.Regions.InAreaRegionName((int)(player.X / 16), (int)(player.Y / 16));
                     var hs = new HashSet<string>(inRegion);
-                    var inSmartRegion = regions.Where(x => hs.Contains(x.name));
+                    var inSmartRegion = regions.Where(x => hs.Contains(x.name)).OrderByDescending(x => x.region.Z);
+                    bool applied = false;
 
                     foreach(var region in inSmartRegion)
                     {
-                        if(!players[player.Index].cooldowns.ContainsKey(region) || DateTime.UtcNow > players[player.Index].cooldowns[region])
+                        if((!players[player.Index].cooldowns.ContainsKey(region)
+                            || DateTime.UtcNow > players[player.Index].cooldowns[region])
+                            && (!applied || !region.region.Name.EndsWith("--")))
                         {
+                            applied = true;
                             string file = Path.Combine(TShock.SavePath, "SmartRegions", region.command);
                             if(File.Exists(file))
                             {
