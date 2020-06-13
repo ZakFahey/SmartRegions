@@ -77,7 +77,7 @@ namespace SmartRegions
         }
         public override Version Version
         {
-            get { return new Version("1.2"); }
+            get { return new Version("1.2.1"); }
         }
         public override string Name
         {
