@@ -56,6 +56,7 @@ namespace SmartRegions
             {
                 ServerApi.Hooks.NetGreetPlayer.Deregister(this, OnGreetPlayer);
                 ServerApi.Hooks.GameUpdate.Deregister(this, OnUpdate);
+                DBConnection?.Close();
             }
             base.Dispose(Disposing);
         }
