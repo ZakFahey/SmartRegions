@@ -1,40 +1,21 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using TShockAPI;
 using Terraria;
 using TerrariaApi.Server;
 using System.IO;
-using TShockAPI.DB;
 using Microsoft.Xna.Framework;
+using System.Threading.Tasks;
 
 namespace SmartRegions
 {
     [ApiVersion(2, 1)]
     public class Plugin : TerrariaPlugin
     {
-        List<SmartRegion> regions = new List<SmartRegion>();
+        private DBConnection DBConnection;
+        List<SmartRegion> regions;
         PlayerData[] players = new PlayerData[255];
-        class SmartRegion
-        {
-            private Region _region = null;
-
-            public string name;
-            public string command;
-            public double cooldown;
-            public Region region
-            {
-                get
-                {
-                    if(_region == null)
-                    {
-                        _region = TShock.Regions.GetRegionByName(name);
-                    }
-                    return _region;
-                }
-            }
-        }
         struct PlayerData
         {
             public Dictionary<SmartRegion, DateTime> cooldowns;
@@ -55,6 +36,8 @@ namespace SmartRegions
             ServerApi.Hooks.NetGreetPlayer.Register(this, OnGreetPlayer);
             ServerApi.Hooks.GameUpdate.Register(this, OnUpdate);
 
+            DBConnection = new DBConnection();
+            DBConnection.Initialize();
             string folder = Path.Combine(TShock.SavePath, "SmartRegions");
             if(!Directory.Exists(folder))
             {
@@ -62,8 +45,9 @@ namespace SmartRegions
             }
             else
             {
-                loadConfig();
+                ReplaceLegacyRegionStorage();
             }
+            regions = DBConnection.GetRegions();
 
         }
         protected override void Dispose(bool Disposing)
@@ -143,7 +127,20 @@ namespace SmartRegions
             return cmd.Replace("[PLAYERNAME]", "\"" + player.Name + "\"");
         }
 
-        public void regionCommand(CommandArgs args)
+        public async void regionCommand(CommandArgs args)
+        {
+            try
+            {
+                await regionCommandInner(args);
+            }
+            catch (Exception e)
+            {
+                TShock.Log.Error(e.ToString());
+                args.Player.SendErrorMessage("The command threw an error.");
+            }
+        }
+
+        public async Task regionCommandInner(CommandArgs args)
         {
             switch(args.Parameters.ElementAtOrDefault(0))
             {
@@ -210,8 +207,8 @@ namespace SmartRegions
                                 else
                                 {
                                     regions.Add(newRegion);
+                                    await DBConnection.SaveRegion(newRegion);
                                     args.Player.SendSuccessMessage("Smart region added!");
-                                    saveConfig();
                                 }
                             }
                         }
@@ -233,8 +230,8 @@ namespace SmartRegions
                             else
                             {
                                 regions.Remove(region);
+                                await DBConnection.RemoveRegion(region.name);
                                 args.Player.SendSuccessMessage("The smart region {0} was removed!", args.Parameters[1]);
-                                saveConfig();
                             }
                         }
                     }
@@ -319,23 +316,27 @@ namespace SmartRegions
             }
         }
 
-        void loadConfig()
+        void ReplaceLegacyRegionStorage()
         {
             string path = Path.Combine(TShock.SavePath, "SmartRegions", "config.txt");
             if(File.Exists(path))
             {
+                var tasks = new List<Task>();
                 try
                 {
                     string[] lines = File.ReadAllLines(path);
                     for(int i = 0; i < lines.Length; i += 3)
                     {
-                        regions.Add(new SmartRegion
+                        var task = DBConnection.SaveRegion(new SmartRegion
                         {
                             name = lines[i],
                             command = lines[i + 1],
                             cooldown = double.Parse(lines[i + 2])
                         });
+                        tasks.Add(task);
                     }
+                    Task.WaitAll(tasks.ToArray());
+                    File.Delete(path);
                 }
                 catch(Exception e)
                 {
@@ -343,33 +344,28 @@ namespace SmartRegions
                 }
             }
         }
-        void saveConfig()
+
+        public async void replaceRegion(CommandArgs args)
         {
-            string path = Path.Combine(TShock.SavePath, "SmartRegions", "config.txt");
-            using(StreamWriter writer = new StreamWriter(path))
+            try
             {
-                foreach(var region in regions)
+                if (players[args.Player.Index].regionToReplace == null)
                 {
-                    writer.WriteLine(region.name);
-                    writer.WriteLine(region.command);
-                    writer.WriteLine(region.cooldown);
+                    args.Player.SendErrorMessage("You can't do that right now!");
+                }
+                else
+                {
+                    regions.RemoveAll(x => x.name == players[args.Player.Index].regionToReplace.name);
+                    regions.Add(players[args.Player.Index].regionToReplace);
+                    await DBConnection.SaveRegion(players[args.Player.Index].regionToReplace);
+                    players[args.Player.Index].regionToReplace = null;
+                    args.Player.SendSuccessMessage("Region successfully replaced!");
                 }
             }
-        }
-
-        public void replaceRegion(CommandArgs args)
-        {
-            if(players[args.Player.Index].regionToReplace == null)
+            catch (Exception e)
             {
-                args.Player.SendErrorMessage("You can't do that right now!");
-            }
-            else
-            {
-                regions.RemoveAll(x => x.name == players[args.Player.Index].regionToReplace.name);
-                regions.Add(players[args.Player.Index].regionToReplace);
-                players[args.Player.Index].regionToReplace = null;
-                args.Player.SendSuccessMessage("Region successfully replaced!");
-                saveConfig();
+                TShock.Log.Error(e.ToString());
+                args.Player.SendErrorMessage("The command threw an error.");
             }
         }
     }
