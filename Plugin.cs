@@ -125,7 +125,7 @@ namespace SmartRegions
 
         string replaceWithName(string cmd, TSPlayer player)
         {
-            return cmd.Replace("[PLAYERNAME]", "\"" + player.Name + "\"");
+            return cmd.Replace("[PLAYERNAME]", $"\"tsn:{player.Name}\"");
         }
 
         public async void regionCommand(CommandArgs args)
