@@ -13,25 +13,34 @@ namespace SmartRegions
     [ApiVersion(2, 1)]
     public class Plugin : TerrariaPlugin
     {
+        public Plugin(Main game) : base(game) { }
+        public override Version Version => new Version("1.3.2"); 
+        public override string Name => "Smart Regions"; 
+        public override string Author => "GameRoom";
+        public override string Description => "Runs commands when players enter a region.";
+        
         private DBConnection DBConnection;
-        List<SmartRegion> regions;
-        PlayerData[] players = new PlayerData[255];
+        private static FileSystemWatcher SmartRegionFileWatcher; 
+
+        private static List<SmartRegion> regions;
+        private static Dictionary<string, string[]> regionCommands;
+        private static PlayerData[] players = new PlayerData[255];
+
         struct PlayerData
         {
-            public Dictionary<SmartRegion, DateTime> cooldowns;
+            public Dictionary<string, DateTime> cooldown;
             public SmartRegion regionToReplace;
             public void Reset()
             {
-                cooldowns = new Dictionary<SmartRegion, DateTime>();
+                cooldown = new Dictionary<string, DateTime>();
                 regionToReplace = null;
             }
         }
 
-        public Plugin(Main game) : base(game) { }
         public override void Initialize()
         {
-            Commands.ChatCommands.Add(new Command("SmartRegions.manage", regionCommand, "smartregion"));
-            Commands.ChatCommands.Add(new Command("SmartRegions.manage", replaceRegion, "replace"));
+            Commands.ChatCommands.Add(new Command("SmartRegions.manage", RegionCommand, "smartregion"));
+            Commands.ChatCommands.Add(new Command("SmartRegions.manage", ReplaceRegion, "replace"));
 
             ServerApi.Hooks.NetGreetPlayer.Register(this, OnGreetPlayer);
             ServerApi.Hooks.GameUpdate.Register(this, OnUpdate);
@@ -39,7 +48,7 @@ namespace SmartRegions
             DBConnection = new DBConnection();
             DBConnection.Initialize();
             string folder = Path.Combine(TShock.SavePath, "SmartRegions");
-            if(!Directory.Exists(folder))
+            if (!Directory.Exists(folder))
             {
                 Directory.CreateDirectory(folder);
             }
@@ -49,7 +58,18 @@ namespace SmartRegions
             }
             regions = DBConnection.GetRegions();
 
+            SmartRegionFileWatcher = new FileSystemWatcher(folder);
+            SmartRegionFileWatcher.NotifyFilter = NotifyFilters.Attributes | NotifyFilters.CreationTime | 
+                                                  NotifyFilters.DirectoryName | NotifyFilters.FileName | 
+                                                  NotifyFilters.LastAccess | NotifyFilters.LastWrite | 
+                                                  NotifyFilters.Security | NotifyFilters.Size;
+            SmartRegionFileWatcher.Changed += OnChanged;
+            SmartRegionFileWatcher.Created += OnCreated;
+            SmartRegionFileWatcher.Deleted += OnDeleted;
+            SmartRegionFileWatcher.Renamed += OnRenamed;
+            SmartRegionFileWatcher.Error += OnError;
         }
+
         protected override void Dispose(bool Disposing)
         {
             if(Disposing)
@@ -57,82 +77,116 @@ namespace SmartRegions
                 ServerApi.Hooks.NetGreetPlayer.Deregister(this, OnGreetPlayer);
                 ServerApi.Hooks.GameUpdate.Deregister(this, OnUpdate);
                 DBConnection?.Close();
+                SmartRegionFileWatcher.Dispose();
             }
             base.Dispose(Disposing);
         }
-        public override Version Version
+
+        #region FileWatcher
+        private static void OnChanged(object sender, FileSystemEventArgs e)
         {
-            get { return new Version("1.3.1"); }
+            if (e.ChangeType != WatcherChangeTypes.Changed)
+                return;
+            if (Path.GetExtension(e.FullPath) != ".txt") 
+                return;
+            string fileName = Path.GetFileNameWithoutExtension(e.FullPath);
+            if (!regionCommands.ContainsKey(fileName))
+                regionCommands.Add(fileName, File.ReadAllLines(e.FullPath));
+            else     
+                regionCommands[fileName] = File.ReadAllLines(e.FullPath);
         }
-        public override string Name
+
+        private static void OnCreated(object sender, FileSystemEventArgs e)
         {
-            get { return "Smart Regions"; }
+            if (Path.GetExtension(e.FullPath) != ".txt")
+                return;
+            string fileName = Path.GetFileNameWithoutExtension(e.FullPath);
+            regionCommands.Add(fileName, File.ReadAllLines(e.FullPath));
         }
-        public override string Author
+
+        private static void OnDeleted(object sender, FileSystemEventArgs e)
         {
-            get { return "GameRoom"; }
+            if (Path.GetExtension(e.FullPath) != ".txt")
+                return;
+            string fileName = Path.GetFileNameWithoutExtension(e.FullPath);
+            if (regionCommands.ContainsKey(fileName))
+                regionCommands.Remove(fileName);
         }
-        public override string Description
+
+        private static void OnRenamed(object sender, RenamedEventArgs e)
         {
-            get { return "Runs commands when players enter a region."; }
+            OnDeleted(sender, new FileSystemEventArgs(WatcherChangeTypes.Deleted, e.OldFullPath, e.Name));
+            OnCreated(sender, new FileSystemEventArgs(WatcherChangeTypes.Created, e.FullPath, e.Name));
         }
+
+        private static void OnError(object sender, ErrorEventArgs e) =>
+            PrintException(e.GetException());
+
+        private static void PrintException(Exception ex)
+        {
+            if (ex != null)
+            {
+                Console.WriteLine($"Message: {ex.Message}");
+                Console.WriteLine("Stacktrace:");
+                Console.WriteLine(ex.StackTrace);
+                Console.WriteLine();
+                PrintException(ex.InnerException);
+            }
+        }
+        #endregion
 
         private void OnGreetPlayer(GreetPlayerEventArgs args)
         {
             players[args.Who].Reset();
         }
 
-        void OnUpdate(EventArgs args)
+        public void OnUpdate(EventArgs args)
         {
-            foreach(TSPlayer player in TShock.Players)
-                if(player != null && NetMessage.buffer[player.Index].broadcast)
+            foreach (TSPlayer player in TShock.Players)
+            {
+                if (player != null && NetMessage.buffer[player.Index].broadcast)
                 {
-                    var inRegion = TShock.Regions.InAreaRegionName((int)(player.X / 16), (int)(player.Y / 16));
-                    var hs = new HashSet<string>(inRegion);
-                    var inSmartRegion = regions.Where(x => hs.Contains(x.name)).OrderByDescending(x => x.region.Z);
-
-                    int regionCounter = 0;
-                    foreach(var region in inSmartRegion)
-                    {
-                        if((regionCounter++ == 0 || !region.region.Name.EndsWith("--"))
-                            && (!players[player.Index].cooldowns.ContainsKey(region)
-                                || DateTime.UtcNow > players[player.Index].cooldowns[region]))
+                    List<SmartRegion> inSmartRegion = new List<SmartRegion>();
+                    for (int i = 0; i < regions.Count; i++)
+                    {                 
+                        if (!regions[i].region.InArea(player.TileX, player.TileY)) continue;
+                        //If region is prefixed with "--" only run it if its the top Z level,
+                        //Hot path unsure how to optimize. 
+                        if (regions[i].region.Name.StartsWith("--", StringComparison.Ordinal))
                         {
-                            string file = Path.Combine(TShock.SavePath, "SmartRegions", region.command);
-                            if(File.Exists(file))
+                            foreach (var region in TShock.Regions.Regions)
+                                if (region.Z > regions[i].region.Z)
+                                    goto CONTINUE_AND_DONT_ADD; 
+                        }
+                        inSmartRegion.Add(regions[i]);
+                        CONTINUE_AND_DONT_ADD: continue; 
+                    }
+                    foreach (var region in inSmartRegion)
+                    {
+                        if(DateTime.UtcNow > players[player.Index].cooldown[region.name])
+                        {
+                            foreach (var command in regionCommands[region.name])
                             {
-                                foreach(string command in File.ReadAllLines(file))
-                                {
-                                    Commands.HandleCommand(TSPlayer.Server, replaceWithName(command, player));
-                                }
+                                Commands.HandleCommand(TSPlayer.Server, ReplaceWithName(command, player));
                             }
-                            else
-                            {
-                                Commands.HandleCommand(TSPlayer.Server, replaceWithName(region.command, player));
-                            }
-                            if(players[player.Index].cooldowns.ContainsKey(region))
-                            {
-                                players[player.Index].cooldowns[region] = DateTime.UtcNow.AddSeconds(region.cooldown);
-                            }
-                            else
-                            {
-                                players[player.Index].cooldowns.Add(region, DateTime.UtcNow.AddSeconds(region.cooldown));
-                            }
+                            players[player.Index].cooldown[region.name] = 
+                                DateTime.UtcNow.AddSeconds(region.cooldown);
                         }
                     }
                 }
+            }
         }
 
-        string replaceWithName(string cmd, TSPlayer player)
+        private static string ReplaceWithName(string cmd, TSPlayer player)
         {
             return cmd.Replace("[PLAYERNAME]", $"\"tsn:{player.Name}\"");
         }
 
-        public async void regionCommand(CommandArgs args)
+        public async void RegionCommand(CommandArgs args)
         {
             try
             {
-                await regionCommandInner(args);
+                await RegionCommandInner(args);
             }
             catch (Exception e)
             {
@@ -141,7 +195,7 @@ namespace SmartRegions
             }
         }
 
-        public async Task regionCommandInner(CommandArgs args)
+        public async Task RegionCommandInner(CommandArgs args)
         {
             switch(args.Parameters.ElementAtOrDefault(0))
             {
@@ -208,6 +262,7 @@ namespace SmartRegions
                                 else
                                 {
                                     regions.Add(newRegion);
+                                    regionCommands.Add(newRegion.name, new string[] { newRegion.command });
                                     await DBConnection.SaveRegion(newRegion);
                                     args.Player.SendSuccessMessage("Smart region added!");
                                 }
@@ -317,7 +372,7 @@ namespace SmartRegions
             }
         }
 
-        void ReplaceLegacyRegionStorage()
+        private void ReplaceLegacyRegionStorage()
         {
             string path = Path.Combine(TShock.SavePath, "SmartRegions", "config.txt");
             if(File.Exists(path))
@@ -346,7 +401,7 @@ namespace SmartRegions
             }
         }
 
-        public async void replaceRegion(CommandArgs args)
+        public async void ReplaceRegion(CommandArgs args)
         {
             try
             {
@@ -356,9 +411,13 @@ namespace SmartRegions
                 }
                 else
                 {
-                    regions.RemoveAll(x => x.name == players[args.Player.Index].regionToReplace.name);
-                    regions.Add(players[args.Player.Index].regionToReplace);
-                    await DBConnection.SaveRegion(players[args.Player.Index].regionToReplace);
+                    SmartRegion regionToReplace = players[args.Player.Index].regionToReplace;
+                    regions.RemoveAll(x => x.name == regionToReplace.name);
+                    regions.Add(regionToReplace);
+                    if (regionCommands.ContainsKey(regionToReplace.name))
+                        regionCommands.Remove(regionToReplace.name);
+                    regionCommands.Add(regionToReplace.name, new string[] { regionToReplace.command });
+                    await DBConnection.SaveRegion(regionToReplace);
                     players[args.Player.Index].regionToReplace = null;
                     args.Player.SendSuccessMessage("Region successfully replaced!");
                 }
