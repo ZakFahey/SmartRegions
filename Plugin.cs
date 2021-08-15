@@ -155,11 +155,14 @@ namespace SmartRegions
                         if (regions[i].region.Name.StartsWith("--", StringComparison.Ordinal))
                         {
                             foreach (var region in TShock.Regions.Regions)
+                            {
+                                if (!region.InArea(player.TileX, player.TileY)) continue;
                                 if (region.Z > regions[i].region.Z)
-                                    goto CONTINUE_AND_DONT_ADD; 
+                                    goto CONTINUE_MAIN_LOOP_AND_DONT_ADD;
+                            }
                         }
                         inSmartRegion.Add(regions[i]);
-                        CONTINUE_AND_DONT_ADD: continue; 
+                        CONTINUE_MAIN_LOOP_AND_DONT_ADD: continue; 
                     }
                     foreach (var region in inSmartRegion)
                     {
