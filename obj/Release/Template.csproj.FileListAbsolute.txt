@@ -1,6 +1,0 @@
-E:\Dropbox\TShock mods\Template\Template\obj\Release\Template.csprojResolveAssemblyReference.cache
-C:\Users\Zak\Desktop\build\Template.dll
-C:\Users\Zak\Desktop\build\Template.pdb
-E:\TShock mods\Template\obj\Release\Template.csprojResolveAssemblyReference.cache
-E:\TShock mods\Template\obj\Release\Template.dll
-E:\TShock mods\Template\obj\Release\Template.pdb
