@@ -22,17 +22,17 @@ namespace SmartRegions
         private DBConnection DBConnection;
         private static FileSystemWatcher SmartRegionFileWatcher; 
 
-        private static List<SmartRegion> regions;
+        private static List<SmartRegion> smartRegions;
         private static Dictionary<string, string[]> regionCommands;
         private static PlayerData[] players = new PlayerData[255];
 
         struct PlayerData
         {
-            public Dictionary<string, DateTime> cooldown;
+            public Dictionary<string, DateTime> cooldowns;
             public SmartRegion regionToReplace;
             public void Reset()
             {
-                cooldown = new Dictionary<string, DateTime>();
+                cooldowns = new Dictionary<string, DateTime>();
                 regionToReplace = null;
             }
         }
@@ -56,7 +56,16 @@ namespace SmartRegions
             {
                 ReplaceLegacyRegionStorage();
             }
-            regions = DBConnection.GetRegions();
+            smartRegions = DBConnection.GetRegions();
+            regionCommands = new Dictionary<string, string[]>();
+            foreach (var region in smartRegions)
+            {
+                string file = Path.Combine(TShock.SavePath, "SmartRegions", region.command);
+                if (File.Exists(file))              
+                    regionCommands.Add(region.name, File.ReadAllLines(file));
+                else
+                    regionCommands.Add(region.name, new string[] { region.command });
+            }
 
             SmartRegionFileWatcher = new FileSystemWatcher(folder);
             SmartRegionFileWatcher.NotifyFilter = NotifyFilters.Attributes | NotifyFilters.CreationTime | 
@@ -147,33 +156,38 @@ namespace SmartRegions
                 if (player != null && NetMessage.buffer[player.Index].broadcast)
                 {
                     List<SmartRegion> inSmartRegion = new List<SmartRegion>();
-                    for (int i = 0; i < regions.Count; i++)
+                    for (int i = 0; i < smartRegions.Count; i++)
                     {                 
-                        if (!regions[i].region.InArea(player.TileX, player.TileY)) continue;
+                        if (!smartRegions[i].region.InArea(player.TileX, player.TileY)) continue;
                         //If region is prefixed with "--" only run it if its the top Z level,
                         //Hot path unsure how to optimize. 
-                        if (regions[i].region.Name.StartsWith("--", StringComparison.Ordinal))
+                        if (smartRegions[i].region.Name.StartsWith("--", StringComparison.Ordinal))
                         {
                             foreach (var region in TShock.Regions.Regions)
                             {
                                 if (!region.InArea(player.TileX, player.TileY)) continue;
-                                if (region.Z > regions[i].region.Z)
+                                if (region.Z > smartRegions[i].region.Z)
                                     goto CONTINUE_MAIN_LOOP_AND_DONT_ADD;
                             }
                         }
-                        inSmartRegion.Add(regions[i]);
+                        inSmartRegion.Add(smartRegions[i]);
                         CONTINUE_MAIN_LOOP_AND_DONT_ADD: continue; 
                     }
                     foreach (var region in inSmartRegion)
                     {
-                        if(DateTime.UtcNow > players[player.Index].cooldown[region.name])
+                        if (!players[player.Index].cooldowns.ContainsKey(region.name))
                         {
                             foreach (var command in regionCommands[region.name])
-                            {
                                 Commands.HandleCommand(TSPlayer.Server, ReplaceWithName(command, player));
-                            }
-                            players[player.Index].cooldown[region.name] = 
-                                DateTime.UtcNow.AddSeconds(region.cooldown);
+                            players[player.Index].cooldowns.Add(
+                                region.name, DateTime.UtcNow.AddSeconds(region.cooldown));
+                        }
+                        else if (DateTime.UtcNow > players[player.Index].cooldowns[region.name])
+                        {
+                            foreach (var command in regionCommands[region.name])
+                                Commands.HandleCommand(TSPlayer.Server, ReplaceWithName(command, player));
+                            players[player.Index].cooldowns[region.name] =
+                                    DateTime.UtcNow.AddSeconds(region.cooldown);
                         }
                     }
                 }
@@ -250,7 +264,7 @@ namespace SmartRegions
                                     return;
                                 }
 
-                                var existingRegion = regions.FirstOrDefault(x => x.name == args.Parameters[1]);
+                                var existingRegion = smartRegions.FirstOrDefault(x => x.name == args.Parameters[1]);
                                 var newRegion = new SmartRegion
                                 {
                                     name = args.Parameters[1],
@@ -264,7 +278,7 @@ namespace SmartRegions
                                 }
                                 else
                                 {
-                                    regions.Add(newRegion);
+                                    smartRegions.Add(newRegion);
                                     regionCommands.Add(newRegion.name, new string[] { newRegion.command });
                                     await DBConnection.SaveRegion(newRegion);
                                     args.Player.SendSuccessMessage("Smart region added!");
@@ -281,14 +295,14 @@ namespace SmartRegions
                         }
                         else
                         {
-                            var region = regions.FirstOrDefault(x => x.name == args.Parameters[1]);
+                            var region = smartRegions.FirstOrDefault(x => x.name == args.Parameters[1]);
                             if(region == null)
                             {
                                 args.Player.SendErrorMessage("No such smart region exists!");
                             }
                             else
                             {
-                                regions.Remove(region);
+                                smartRegions.Remove(region);
                                 await DBConnection.RemoveRegion(region.name);
                                 args.Player.SendSuccessMessage("The smart region {0} was removed!", args.Parameters[1]);
                             }
@@ -303,7 +317,7 @@ namespace SmartRegions
                         }
                         else
                         {
-                            var region = regions.FirstOrDefault(x => x.name == args.Parameters[1]);
+                            var region = smartRegions.FirstOrDefault(x => x.name == args.Parameters[1]);
                             if(region == null)
                             {
                                 args.Player.SendInfoMessage("That region doesn't have a command associated with it.");
@@ -335,7 +349,7 @@ namespace SmartRegions
                             }
                             int.TryParse(args.Parameters[2], out maxDist);
                         }
-                        List<SmartRegion> regionList = regions;
+                        List<SmartRegion> regionList = smartRegions;
                         if(maxDist < int.MaxValue)
                         {
                             regionList = regionList
@@ -415,13 +429,16 @@ namespace SmartRegions
                 else
                 {
                     SmartRegion regionToReplace = players[args.Player.Index].regionToReplace;
-                    regions.RemoveAll(x => x.name == regionToReplace.name);
-                    regions.Add(regionToReplace);
+                    smartRegions.RemoveAll(x => x.name == regionToReplace.name);
+                    smartRegions.Add(regionToReplace);
                     if (regionCommands.ContainsKey(regionToReplace.name))
                         regionCommands.Remove(regionToReplace.name);
                     regionCommands.Add(regionToReplace.name, new string[] { regionToReplace.command });
+
                     await DBConnection.SaveRegion(regionToReplace);
                     players[args.Player.Index].regionToReplace = null;
+                    players[args.Player.Index].cooldowns[regionToReplace.name] = new DateTime(0);
+
                     args.Player.SendSuccessMessage("Region successfully replaced!");
                 }
             }
