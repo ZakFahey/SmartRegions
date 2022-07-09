@@ -82,7 +82,7 @@ namespace SmartRegions
             players[args.Who].Reset();
         }
 
-        public event EventHandler<PlayerInRegionEventArgs> PlayerInRegion;
+        public static event EventHandler<PlayerInRegionEventArgs> PlayerInRegion;
 
         public class PlayerInRegionEventArgs : EventArgs
         {
