@@ -3,7 +3,7 @@ using TShockAPI.DB;
 
 namespace SmartRegions
 {
-    class SmartRegion
+    public class SmartRegion
     {
         private Region _region = null;
 
