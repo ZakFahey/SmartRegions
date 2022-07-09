@@ -82,6 +82,15 @@ namespace SmartRegions
             players[args.Who].Reset();
         }
 
+        public static event EventHandler<PlayerInRegionEventArgs> PlayerInRegion;
+
+        public class PlayerInRegionEventArgs : EventArgs
+        {
+            public TSPlayer Player { get; set; }
+            public SmartRegion Region { get; set; }
+            public bool IgnoreRegion { get; set; }
+        }
+
         void OnUpdate(EventArgs args)
         {
             foreach(TSPlayer player in TShock.Players)
@@ -92,8 +101,17 @@ namespace SmartRegions
                     var inSmartRegion = regions.Where(x => hs.Contains(x.name)).OrderByDescending(x => x.region.Z);
 
                     int regionCounter = 0;
-                    foreach(var region in inSmartRegion)
+                    foreach(SmartRegion region in inSmartRegion)
                     {
+                        PlayerInRegionEventArgs eventArgs = new PlayerInRegionEventArgs()
+                        {
+                            Player = player,
+                            Region = region
+                        };
+                        PlayerInRegion?.Invoke(this, eventArgs);
+                        if (eventArgs.IgnoreRegion)
+                            continue;
+
                         if((regionCounter++ == 0 || !region.region.Name.EndsWith("--"))
                             && (!players[player.Index].cooldowns.ContainsKey(region)
                                 || DateTime.UtcNow > players[player.Index].cooldowns[region]))
