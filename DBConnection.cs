@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Threading.Tasks;
-using System.Data.SQLite;
+using Microsoft.Data.Sqlite;
 using TShockAPI;
 using System.IO;
 
@@ -8,14 +8,14 @@ namespace SmartRegions
 {
     sealed class DBConnection
     {
-        SQLiteConnection Connection;
+        SqliteConnection Connection;
 
         public void Initialize()
         {
             string path = Path.Combine(TShock.SavePath, "SmartRegions", "SmartRegions.sqlite");
-            Connection = new SQLiteConnection($"Data Source={path}");
+            Connection = new SqliteConnection($"Data Source='{path}'");
             Connection.Open();
-            var command = new SQLiteCommand(
+            var command = new SqliteCommand(
                 "CREATE TABLE IF NOT EXISTS Regions (" +
                 "  Name TEXT PRIMARY KEY," +
                 "  Command TEXT," +
@@ -27,7 +27,7 @@ namespace SmartRegions
         public List<SmartRegion> GetRegions()
         {
             var result = new List<SmartRegion>();
-            var command = new SQLiteCommand("SELECT Name, Command, Cooldown FROM Regions", Connection);
+            var command = new SqliteCommand("SELECT Name, Command, Cooldown FROM Regions", Connection);
             using (var reader = command.ExecuteReader())
             {
                 while (reader.Read())
@@ -43,19 +43,19 @@ namespace SmartRegions
 
         public async Task SaveRegion(SmartRegion region)
         {
-            var command = new SQLiteCommand(
+            var command = new SqliteCommand(
                 "INSERT OR REPLACE INTO Regions (Name, Command, Cooldown) VALUES (@nm, @cmd, @cool)",
                 Connection);
-            command.Parameters.Add(new SQLiteParameter("@nm", region.name));
-            command.Parameters.Add(new SQLiteParameter("@cmd", region.command));
-            command.Parameters.Add(new SQLiteParameter("@cool", region.cooldown));
+            command.Parameters.Add(new SqliteParameter("@nm", region.name));
+            command.Parameters.Add(new SqliteParameter("@cmd", region.command));
+            command.Parameters.Add(new SqliteParameter("@cool", region.cooldown));
             await command.ExecuteNonQueryAsync();
         }
 
         public async Task RemoveRegion(string region)
         {
-            var command = new SQLiteCommand("DELETE FROM Regions WHERE Name = @nm", Connection);
-            command.Parameters.Add(new SQLiteParameter("@nm", region));
+            var command = new SqliteCommand("DELETE FROM Regions WHERE Name = @nm", Connection);
+            command.Parameters.Add(new SqliteParameter("@nm", region));
             await command.ExecuteNonQueryAsync();
         }
 
