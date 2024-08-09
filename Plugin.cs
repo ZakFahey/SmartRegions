@@ -28,6 +28,15 @@ namespace SmartRegions
         }
 
         public Plugin(Main game) : base(game) { }
+
+        public override Version Version => new Version("1.4.1");
+
+        public override string Name => "Smart Regions";
+
+        public override string Author => "GameRoom，肝帝熙恩汉化";
+
+        public override string Description => "当玩家进入区域时运行命令。";
+
         public override void Initialize()
         {
             Commands.ChatCommands.Add(new Command("SmartRegions.manage", regionCommand, "smartregion"));
@@ -59,22 +68,6 @@ namespace SmartRegions
                 DBConnection?.Close();
             }
             base.Dispose(Disposing);
-        }
-        public override Version Version
-        {
-            get { return new Version("1.4.1"); }
-        }
-        public override string Name
-        {
-            get { return "Smart Regions"; }
-        }
-        public override string Author
-        {
-            get { return "GameRoom"; }
-        }
-        public override string Description
-        {
-            get { return "Runs commands when players enter a region."; }
         }
 
         private void OnGreetPlayer(GreetPlayerEventArgs args)
@@ -155,7 +148,7 @@ namespace SmartRegions
             catch (Exception e)
             {
                 TShock.Log.Error(e.ToString());
-                args.Player.SendErrorMessage("The command threw an error.");
+                args.Player.SendErrorMessage("命令执行时出现错误。");
             }
         }
 
@@ -167,29 +160,29 @@ namespace SmartRegions
                     {
                         if(args.Parameters.Count < 4)
                         {
-                            args.Player.SendErrorMessage("Invalid syntax! Correct syntax: /smartregion add <region name> <cooldown> <command or file>");
+                            args.Player.SendErrorMessage("语法错误！正确的语法是：/smartregion add <区域名称> <冷却时间> <命令或文件>");
                         }
                         else
                         {
                             double cooldown = 0;
                             if(!double.TryParse(args.Parameters[2], out cooldown))
                             {
-                                args.Player.SendErrorMessage("Invalid syntax! Correct syntax: /smartregion add <region name> <cooldown> <command or file>");
+                                args.Player.SendErrorMessage("无效的语法！正确的语法是：/smartregion add <区域名> <冷却时间> <命令或文件>");
                                 return;
                             }
                             string command = string.Join(" ", args.Parameters.GetRange(3, args.Parameters.Count - 3));
                             if(!TShock.Regions.Regions.Exists(x => x.Name == args.Parameters[1]))
                             {
-                                args.Player.SendErrorMessage("The region {0} doesn't exist!", args.Parameters[1]);
+                                args.Player.SendErrorMessage("区域 {0} 不存在！", args.Parameters[1]);
                                 IEnumerable<string> regionNames = from region_ in TShock.Regions.Regions
                                                                   where region_.WorldID == Main.worldID.ToString()
                                                                   select region_.Name;
                                 PaginationTools.SendPage(args.Player, 1, PaginationTools.BuildLinesFromTerms(regionNames),
                                     new PaginationTools.Settings
                                     {
-                                        HeaderFormat = "Regions ({0}/{1}):",
-                                        FooterFormat = "Type {0}region list {{0}} for more.".SFormat(Commands.Specifier),
-                                        NothingToDisplayString = "There are currently no regions defined."
+                                        HeaderFormat = "区域 ({0}/{1}) ：",
+                                        FooterFormat = "输入 {0}region list {{0}} 查看更多。".SFormat(Commands.Specifier),
+                                        NothingToDisplayString = "目前没有定义任何区域。"
                                     });
                             }
                             else
@@ -200,14 +193,14 @@ namespace SmartRegions
                                     cmdName += command[i];
                                 }
                                 Command cmd = Commands.ChatCommands.FirstOrDefault(c => c.HasAlias(cmdName));
-                                if(cmd != null && !cmd.CanRun(args.Player))
+                                if (cmd != null && !cmd.CanRun(args.Player))
                                 {
-                                    args.Player.SendErrorMessage("You cannot create a smart region with a command you don't have permission to use yourself!");
+                                    args.Player.SendErrorMessage("你没有权限使用此命令，因此不能创建智能区域！");
                                     return;
                                 }
-                                if(cmd != null && !cmd.AllowServer)
+                                if (cmd != null && !cmd.AllowServer)
                                 {
-                                    args.Player.SendErrorMessage("Your command must be usable by the server!");
+                                    args.Player.SendErrorMessage("你的命令必须允许服务器执行！");
                                     return;
                                 }
 
@@ -218,16 +211,16 @@ namespace SmartRegions
                                     cooldown = cooldown,
                                     command = command
                                 };
-                                if(existingRegion != null)
+                                if (existingRegion != null)
                                 {
                                     players[args.Player.Index].regionToReplace = newRegion;
-                                    args.Player.SendErrorMessage("The smart region {0} already exists! Type /replace to replace it.", args.Parameters[1]);
+                                    args.Player.SendErrorMessage("智能区域 {0} 已经存在！请输入 /replace 替换它。", args.Parameters[1]);
                                 }
                                 else
                                 {
                                     regions.Add(newRegion);
                                     await DBConnection.SaveRegion(newRegion);
-                                    args.Player.SendSuccessMessage("Smart region added!");
+                                    args.Player.SendSuccessMessage("智能区域已添加！");
                                 }
                             }
                         }
@@ -235,45 +228,48 @@ namespace SmartRegions
                     break;
                 case "remove":
                     {
-                        if(args.Parameters.Count != 2)
+                        if (args.Parameters.Count != 2)
                         {
-                            args.Player.SendErrorMessage("Invalid syntax! Correct syntax: /smartregion remove <regionname>");
+                            args.Player.SendErrorMessage("无效的语法！正确的语法是：/smartregion remove <区域名>");
                         }
                         else
                         {
                             var region = regions.FirstOrDefault(x => x.name == args.Parameters[1]);
-                            if(region == null)
+                            if (region == null)
                             {
-                                args.Player.SendErrorMessage("No such smart region exists!");
+                                args.Player.SendErrorMessage("不存在这样的智能区域！");
                             }
                             else
                             {
                                 regions.Remove(region);
                                 await DBConnection.RemoveRegion(region.name);
-                                args.Player.SendSuccessMessage("The smart region {0} was removed!", args.Parameters[1]);
+                                args.Player.SendSuccessMessage("智能区域 {0} 已被移除！", args.Parameters[1]);
                             }
                         }
                     }
                     break;
                 case "check":
                     {
-                        if(args.Parameters.Count != 2)
+                        if (args.Parameters.Count != 2)
                         {
-                            args.Player.SendErrorMessage("Invalid syntax! Correct syntax: /smartregion check <regionname>");
+                            args.Player.SendErrorMessage("无效的语法！正确的语法是：/smartregion check <区域名>");
                         }
                         else
                         {
                             var region = regions.FirstOrDefault(x => x.name == args.Parameters[1]);
-                            if(region == null)
+                            if (region == null)
                             {
-                                args.Player.SendInfoMessage("That region doesn't have a command associated with it.");
+                                args.Player.SendInfoMessage("该区域没有关联的命令。");
                             }
                             else
                             {
                                 string file = Path.Combine(TShock.SavePath, "SmartRegions", region.command), commands;
-                                if(File.Exists(file)) commands = "s:\n" + File.ReadAllText(file);
-                                else commands = ":\n" + region.command;
-                                args.Player.SendInfoMessage("The region {0} has a cooldown of {1} second{2} and uses the command{3}", args.Parameters[1], region.cooldown, region.cooldown == 1.0 ? "" : "s", commands);
+                                if (File.Exists(file))
+                                    commands = "脚本中的命令如下：\n" + File.ReadAllText(file);
+                                else
+                                    commands = "命令如下：\n" + region.command;
+
+                                args.Player.SendInfoMessage("区域 {0} 的冷却时间为 {1} 秒，使用命令：{2}", args.Parameters[1], region.cooldown, commands);
                             }
                         }
                     }
@@ -282,37 +278,39 @@ namespace SmartRegions
                     {
                         int pageNumber = 1;
                         int maxDist = int.MaxValue;
-                        if(args.Parameters.Count > 1)
+                        if (args.Parameters.Count > 1)
                         {
                             int.TryParse(args.Parameters[1], out pageNumber);
                         }
-                        if(args.Parameters.Count > 2)
+                        if (args.Parameters.Count > 2)
                         {
-                            if(args.Player == TSPlayer.Server)
+                            if (args.Player == TSPlayer.Server)
                             {
-                                args.Player.SendErrorMessage("You cannot use the distance argument if you're the server.");
+                                args.Player.SendErrorMessage("如果您是服务器后台，不能使用距离参数。");
                                 return;
                             }
                             int.TryParse(args.Parameters[2], out maxDist);
                         }
+
                         List<SmartRegion> regionList = regions;
-                        if(maxDist < int.MaxValue)
+                        if (maxDist < int.MaxValue)
                         {
                             regionList = regionList
                                 .Where(r => r.region != null && Vector2.Distance(args.Player.TPlayer.position, r.region.Area.Center() * 16) < maxDist * 16)
                                 .ToList();
                         }
+
                         List<string> regionNames = regionList.Select(r => r.name).ToList();
                         regionNames.Sort();
 
-                        if(regionNames.Count == 0)
+                        if (regionNames.Count == 0)
                         {
                             string suffix = "";
-                            if(maxDist < int.MaxValue)
+                            if (maxDist < int.MaxValue)
                             {
-                                suffix = " nearby";
+                                suffix = "附近的";
                             }
-                            args.Player.SendErrorMessage($"There are no smart regions{suffix}.");
+                            args.Player.SendErrorMessage($"没有{suffix}智能区域。");
                         }
                         else
                         {
@@ -320,16 +318,17 @@ namespace SmartRegions
                                 args.Player, pageNumber, PaginationTools.BuildLinesFromTerms(regionNames),
                                 new PaginationTools.Settings
                                 {
-                                    HeaderFormat = "Smart regions ({0}/{1}):",
-                                    FooterFormat = string.Format("Type {0}smartregion list {{0}} for more.", Commands.Specifier)
+                                    HeaderFormat = "智能区域 ({0}/{1}) ：",
+                                    FooterFormat = $"输入 {Commands.Specifier}smartregion list {{0}} 查看更多。"
                                 }
                             );
                         }
                     }
                     break;
+
                 default:
                     {
-                        args.Player.SendInfoMessage("/smartregion sub-commands:\nadd <region name> <cooldown> <command or file>\nremove <region name>\ncheck <region name>\nlist [page] [max dist]");
+                        args.Player.SendInfoMessage("/smartregion 子命令:\nadd <区域名> <冷却时间> <命令或文件>\nremove <区域名>\ncheck <区域名>\nlist [页码] [最大距离]");
                     }
                     break;
             }
@@ -370,7 +369,7 @@ namespace SmartRegions
             {
                 if (players[args.Player.Index].regionToReplace == null)
                 {
-                    args.Player.SendErrorMessage("You can't do that right now!");
+                    args.Player.SendErrorMessage("你现在不能做这个操作！");
                 }
                 else
                 {
@@ -378,13 +377,13 @@ namespace SmartRegions
                     regions.Add(players[args.Player.Index].regionToReplace);
                     await DBConnection.SaveRegion(players[args.Player.Index].regionToReplace);
                     players[args.Player.Index].regionToReplace = null;
-                    args.Player.SendSuccessMessage("Region successfully replaced!");
+                    args.Player.SendSuccessMessage("区域替换成功！");
                 }
             }
             catch (Exception e)
             {
                 TShock.Log.Error(e.ToString());
-                args.Player.SendErrorMessage("The command threw an error.");
+                args.Player.SendErrorMessage("命令执行时出现错误。");
             }
         }
     }
