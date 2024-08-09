@@ -1,16 +1,16 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
-    <OutputType>Library</OutputType>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <OutputPath>C:\Users\Zak\Desktop\build\</OutputPath>
-  </PropertyGroup>
-  <ItemGroup>
-    <WCFMetadata Include="Service References\" />
-  </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="TShock" Version="5.2.0" />
-  </ItemGroup>
+	<PropertyGroup>
+		<TargetFramework>net6.0</TargetFramework>
+		<OutputType>Library</OutputType>
+		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+	</PropertyGroup>
+	<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+		<OutputPath>C:\Users\Zak\Desktop\build\</OutputPath>
+	</PropertyGroup>
+	<ItemGroup>
+		<WCFMetadata Include="Service References\" />
+	</ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="TShock" Version="5.2.0" />
+	</ItemGroup>
 </Project>
