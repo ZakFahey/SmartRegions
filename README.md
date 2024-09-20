@@ -1,4 +1,4 @@
-#本仓库已不再更新，已经整合到：https://github.com/UnrealMultiple/TShockPlugin，后续更新均会发布至此仓库
+# 本仓库已不再更新，已经整合到：https://github.com/UnrealMultiple/TShockPlugin，后续更新均会发布至此仓库
 # This repository is no longer updated and has been integrated into: https://github.com/UnrealMultiple/TShockPlugin. All future updates will be published there.
 
 This plugin runs any command you want when a player enters a region. You could use this to set a player's team, heal them, give them items, or whatever you want. The possibilities are endless.
