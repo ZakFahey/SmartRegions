@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<TargetFramework>net6.0</TargetFramework>
+		<TargetFramework>net9.0</TargetFramework>
 		<OutputType>Library</OutputType>
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 	</PropertyGroup>
@@ -8,6 +8,6 @@
 		<WCFMetadata Include="Service References\" />
 	</ItemGroup>
 	<ItemGroup>
-		<PackageReference Include="TShock" Version="5.2.4" />
+		<PackageReference Include="TShock" Version="6.1.0" />
 	</ItemGroup>
 </Project>
