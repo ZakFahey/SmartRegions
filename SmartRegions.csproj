@@ -8,6 +8,6 @@
 		<WCFMetadata Include="Service References\" />
 	</ItemGroup>
 	<ItemGroup>
-		<PackageReference Include="TShock" Version="6.1.0" />
+		<PackageReference Include="TShock" Version="6.2.1" />
 	</ItemGroup>
 </Project>
