@@ -15,7 +15,10 @@ namespace SmartRegions
     {
         private DBConnection DBConnection;
         List<SmartRegion> regions;
+        /// <summary> Each region in <see cref="regions"/> by name, with its index in the list </summary>
+        Dictionary<string, (SmartRegion region, int index)> regionsByName;
         PlayerData[] players = new PlayerData[255];
+        int ticks;
         struct PlayerData
         {
             public Dictionary<SmartRegion, DateTime> cooldowns;
@@ -28,7 +31,7 @@ namespace SmartRegions
         }
 
         public Plugin(Main game) : base(game) { }
-        public override Version Version => new Version(1, 4, 2);
+        public override Version Version => new Version(1, 4, 3);
 
         public override string Name => "Smart Regions";
 
@@ -55,6 +58,7 @@ namespace SmartRegions
             DBConnection = new DBConnection();//initialization order
             DBConnection.Initialize();
             regions = DBConnection.GetRegions();
+            OnRegionsChanged();
 
         }
         protected override void Dispose(bool Disposing)
@@ -84,12 +88,26 @@ namespace SmartRegions
 
         void OnUpdate(EventArgs args)
         {
+            // Run every other game tick
+            if (++ticks % 2 != 0)
+                return;
+
             foreach (TSPlayer player in TShock.Players)
                 if (player != null && NetMessage.buffer[player.Index].broadcast)
                 {
-                    var inRegion = TShock.Regions.InAreaRegionName((int)(player.X / 16), (int)(player.Y / 16));
-                    var hs = new HashSet<string>(inRegion);
-                    var inSmartRegion = regions.Where(x => hs.Contains(x.name)).OrderByDescending(x => x.region.Z);
+                    // Ordered by Z, and otherwise by their order in the regions list
+                    var inSmartRegions = new List<(SmartRegion region, int index)>();
+                    foreach (string name in TShock.Regions.InAreaRegionName((int)(player.X / 16), (int)(player.Y / 16)))
+                    {
+                        if (regionsByName.TryGetValue(name, out var region) && !inSmartRegions.Contains(region))
+                        {
+                            inSmartRegions.Add(region);
+                        }
+                    }
+                    var inSmartRegion = inSmartRegions
+                        .OrderByDescending(x => x.region.region.Z)
+                        .ThenBy(x => x.index)
+                        .Select(x => x.region);
 
                     int regionCounter = 0;
                     foreach (SmartRegion region in inSmartRegion)
@@ -130,6 +148,15 @@ namespace SmartRegions
                         }
                     }
                 }
+        }
+
+        void OnRegionsChanged()
+        {
+            regionsByName = new Dictionary<string, (SmartRegion region, int index)>();
+            for (int i = 0; i < regions.Count; i++)
+            {
+                regionsByName[regions[i].name] = (regions[i], i);
+            }
         }
 
         string replaceWithName(string cmd, TSPlayer player)
@@ -217,6 +244,7 @@ namespace SmartRegions
                                 else
                                 {
                                     regions.Add(newRegion);
+                                    OnRegionsChanged();
                                     await DBConnection.SaveRegion(newRegion);
                                     args.Player.SendSuccessMessage("Smart region added!");
                                 }
@@ -240,6 +268,7 @@ namespace SmartRegions
                             else
                             {
                                 regions.Remove(region);
+                                OnRegionsChanged();
                                 await DBConnection.RemoveRegion(region.name);
                                 args.Player.SendSuccessMessage("The smart region {0} was removed!", args.Parameters[1]);
                             }
@@ -367,6 +396,7 @@ namespace SmartRegions
                 {
                     regions.RemoveAll(x => x.name == players[args.Player.Index].regionToReplace.name);
                     regions.Add(players[args.Player.Index].regionToReplace);
+                    OnRegionsChanged();
                     await DBConnection.SaveRegion(players[args.Player.Index].regionToReplace);
                     players[args.Player.Index].regionToReplace = null;
                     args.Player.SendSuccessMessage("Region successfully replaced!");
