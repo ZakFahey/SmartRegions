@@ -142,6 +142,7 @@ namespace SmartRegions
                     return DateTime.SpecifyKind(reader.GetDateTime(0), DateTimeKind.Utc);
                 }
             }
+            // If the last update table doesn't exist, fall back to other ways of figuring it out.
             using var countCommand = Command(connection, null, $"SELECT COUNT(*) FROM {RegionsTable}");
             return Convert.ToInt64(countCommand.ExecuteScalar()) > 0 ? UnrecordedLastUpdate() : null;
         }
