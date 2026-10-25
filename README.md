@@ -11,3 +11,8 @@ This plugin runs any command you want when a player enters a region. You could u
 SmartRegions.manage
 
 End a region name with `--` and it will only execute if it has the highest Z value of all overlapping regions.
+
+# Storage
+The regions are stored based on the settings configured in TShock's `config.json`: if it's set to SQLite, regions are saved to `tshock/SmartRegions/SmartRegions.sqlite`. Otherwise if it's set to MySQL, they're saved to the `smartregions` and `smartregions_lastupdate` tables in `tshockdb`. When you update the setting, the plugin will automatically migrate its data.
+
+Warning: to mitigate the risk of data desync, if you want to change TShock's storage setting, do so when your server network is fully turned off.

@@ -31,7 +31,7 @@ namespace SmartRegions
         }
 
         public Plugin(Main game) : base(game) { }
-        public override Version Version => new Version(1, 4, 3);
+        public override Version Version => new Version(1, 4, 4);
 
         public override string Name => "Smart Regions";
 
@@ -46,20 +46,11 @@ namespace SmartRegions
 
             ServerApi.Hooks.NetGreetPlayer.Register(this, OnGreetPlayer);
             ServerApi.Hooks.GameUpdate.Register(this, OnUpdate);
-            string folder = Path.Combine(TShock.SavePath, "SmartRegions");
-            if (!Directory.Exists(folder))
-            {
-                Directory.CreateDirectory(folder);
-            }
-            else
-            {
-                ReplaceLegacyRegionStorage();
-            }
-            DBConnection = new DBConnection();//initialization order
-            DBConnection.Initialize();
+            Directory.CreateDirectory(Path.Combine(TShock.SavePath, "SmartRegions"));
+            DBConnection = DBConnection.Open();
+            ReplaceLegacyRegionStorage();
             regions = DBConnection.GetRegions();
             OnRegionsChanged();
-
         }
         protected override void Dispose(bool Disposing)
         {
@@ -67,7 +58,6 @@ namespace SmartRegions
             {
                 ServerApi.Hooks.NetGreetPlayer.Deregister(this, OnGreetPlayer);
                 ServerApi.Hooks.GameUpdate.Deregister(this, OnUpdate);
-                DBConnection?.Close();
             }
             base.Dispose(Disposing);
         }
@@ -360,6 +350,7 @@ namespace SmartRegions
             string path = Path.Combine(TShock.SavePath, "SmartRegions", "config.txt");
             if (File.Exists(path))
             {
+                TShock.Log.ConsoleInfo("Migrating legacy region storage.");
                 var tasks = new List<Task>();
                 try
                 {
