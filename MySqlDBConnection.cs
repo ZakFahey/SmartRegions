@@ -17,13 +17,20 @@ namespace SmartRegions
             "CREATE TABLE IF NOT EXISTS smartregions (" +
             "  Name VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin PRIMARY KEY," +
             "  Command TEXT CHARACTER SET utf8mb4," +
-            "  Cooldown DOUBLE)",
+            "  Cooldown DOUBLE," +
+            "  GroupName VARCHAR(255) CHARACTER SET utf8mb4)",
             "CREATE TABLE IF NOT EXISTS smartregions_lastupdate (" +
             "  Id INT PRIMARY KEY," +
             "  LastUpdate TIMESTAMP NOT NULL)"
         };
         protected override string TableExistsSql =>
-            "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = @name";
+            "SELECT COUNT(*) FROM information_schema.tables " +
+            "WHERE table_schema = DATABASE() AND table_name = @name";
+        protected override string ColumnExistsSql =>
+            "SELECT COUNT(*) FROM information_schema.columns " +
+            "WHERE table_schema = DATABASE() AND table_name = @table AND column_name = @column";
+        protected override string AddGroupColumnSql =>
+            "ALTER TABLE smartregions ADD COLUMN GroupName VARCHAR(255) CHARACTER SET utf8mb4";
         // TIMESTAMP values are converted using the session time zone; UTC avoids DST gaps and overlaps
         protected override string ConnectionInitSql => "SET time_zone = '+00:00'";
 
@@ -33,7 +40,8 @@ namespace SmartRegions
             var settings = TShock.Config.Settings;
             if (settings.MySqlConnectionString is not (null or ""))
             {
-                return new MySqlConnection(new MySqlConnectionStringBuilder(settings.MySqlConnectionString).ToString());
+                var connectionString = new MySqlConnectionStringBuilder(settings.MySqlConnectionString);
+                return new MySqlConnection(connectionString.ToString());
             }
 
             string[] hostport = settings.MySqlHost.Split(':');

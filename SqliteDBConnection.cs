@@ -42,13 +42,17 @@ namespace SmartRegions
             "CREATE TABLE IF NOT EXISTS Regions (" +
             "  Name TEXT PRIMARY KEY," +
             "  Command TEXT," +
-            "  Cooldown REAL)",
+            "  Cooldown REAL," +
+            "  GroupName TEXT)",
             "CREATE TABLE IF NOT EXISTS LastUpdate (" +
             "  Id INTEGER PRIMARY KEY," +
             "  LastUpdate TEXT NOT NULL)"
         };
         protected override string TableExistsSql =>
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = @name";
+        protected override string ColumnExistsSql =>
+            "SELECT COUNT(*) FROM pragma_table_info(@table) WHERE name = @column";
+        protected override string AddGroupColumnSql => "ALTER TABLE Regions ADD COLUMN GroupName TEXT";
 
         protected override DbConnection CreateConnection()
         {

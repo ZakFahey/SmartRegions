@@ -115,17 +115,17 @@ namespace SmartRegions
                             && (!players[player.Index].cooldowns.ContainsKey(region)
                                 || DateTime.UtcNow > players[player.Index].cooldowns[region]))
                         {
-                            string file = Path.Combine(TShock.SavePath, "SmartRegions", region.command);
-                            if (File.Exists(file))
+                            TSPlayer executor = CommandExecutor(region);
+                            if (executor != null && CommandFile(region.command) is string file)
                             {
                                 foreach (string command in File.ReadAllLines(file))
                                 {
-                                    Commands.HandleCommand(TSPlayer.Server, replaceWithName(command, player));
+                                    Commands.HandleCommand(executor, replaceWithName(command, player));
                                 }
                             }
-                            else
+                            else if (executor != null)
                             {
-                                Commands.HandleCommand(TSPlayer.Server, replaceWithName(region.command, player));
+                                Commands.HandleCommand(executor, replaceWithName(region.command, player));
                             }
                             if (players[player.Index].cooldowns.ContainsKey(region))
                             {
@@ -147,6 +147,38 @@ namespace SmartRegions
             {
                 regionsByName[regions[i].name] = (regions[i], i);
             }
+        }
+
+        /// <returns> Who the region's commands run as, or null if its group no longer exists </returns>
+        static TSPlayer CommandExecutor(SmartRegion region)
+        {
+            if (region.group == null || region.group == TSPlayer.Server.Group.Name)
+                return TSPlayer.Server;
+            Group group = TShock.Groups.GetGroupByName(region.group);
+            // A server player, so that plugins treat it the same as the server, apart from its permissions
+            return group == null ? null : new TSServerPlayer { Group = group };
+        }
+
+        /// <returns>
+        /// The path of the file in the SmartRegions folder that the region's command names, or null if it
+        /// doesn't name one
+        /// </returns>
+        static string CommandFile(string command)
+        {
+            if (command.Contains('\0'))
+                return null;
+            string folder = Path.GetFullPath(Path.Combine(TShock.SavePath, "SmartRegions"));
+            string file = Path.GetFullPath(Path.Combine(folder, command));
+            return Path.GetDirectoryName(file) == folder && File.Exists(file) ? file : null;
+        }
+
+        /// <returns> Every command HandleCommand would run for this text </returns>
+        static IEnumerable<Command> FindCommands(string text)
+        {
+            string cmdText = text.Substring(1);
+            int end = cmdText.IndexOfAny(new[] { ' ', '\t', '\n' });
+            string cmdName = (end < 0 ? cmdText : cmdText.Substring(0, end)).ToLower();
+            return Commands.ChatCommands.FindAll(c => c.HasAlias(cmdName));
         }
 
         string replaceWithName(string cmd, TSPlayer player)
@@ -202,18 +234,15 @@ namespace SmartRegions
                             }
                             else
                             {
-                                string cmdName = "";
-                                for (int i = 1; i < command.Length && command[i] != ' '; i++)
-                                {
-                                    cmdName += command[i];
-                                }
-                                Command cmd = Commands.ChatCommands.FirstOrDefault(c => c.HasAlias(cmdName));
-                                if (cmd != null && !cmd.CanRun(args.Player))
+                                var cmds = CommandFile(command) == null
+                                    ? FindCommands(command).ToList()
+                                    : new List<Command>();
+                                if (cmds.Any(cmd => !cmd.CanRun(args.Player)))
                                 {
                                     args.Player.SendErrorMessage("You cannot create a smart region with a command you don't have permission to use yourself!");
                                     return;
                                 }
-                                if (cmd != null && !cmd.AllowServer)
+                                if (cmds.Any(cmd => !cmd.AllowServer))
                                 {
                                     args.Player.SendErrorMessage("Your command must be usable by the server!");
                                     return;
@@ -224,7 +253,8 @@ namespace SmartRegions
                                 {
                                     name = args.Parameters[1],
                                     cooldown = cooldown,
-                                    command = command
+                                    command = command,
+                                    group = args.Player.Group.Name
                                 };
                                 if (existingRegion != null)
                                 {
@@ -280,8 +310,9 @@ namespace SmartRegions
                             }
                             else
                             {
-                                string file = Path.Combine(TShock.SavePath, "SmartRegions", region.command), commands;
-                                if (File.Exists(file)) commands = "s:\n" + File.ReadAllText(file);
+                                string commands;
+                                if (CommandFile(region.command) is string file)
+                                    commands = "s:\n" + File.ReadAllText(file);
                                 else commands = ":\n" + region.command;
                                 args.Player.SendInfoMessage("The region {0} has a cooldown of {1} second{2} and uses the command{3}", args.Parameters[1], region.cooldown, region.cooldown == 1.0 ? "" : "s", commands);
                             }

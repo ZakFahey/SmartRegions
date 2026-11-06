@@ -10,6 +10,11 @@ namespace SmartRegions
         public string name;
         public string command;
         public double cooldown;
+        /// <summary>
+        /// The group of whoever set the region, whose permissions its commands run with. Null to run them
+        /// as the server.
+        /// </summary>
+        public string group;
         public Region region
         {
             get

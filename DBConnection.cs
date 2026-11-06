@@ -13,6 +13,10 @@ namespace SmartRegions
         protected abstract string[] CreateTablesSql { get; }
         /// <summary> Query returning the number of tables named @name </summary>
         protected abstract string TableExistsSql { get; }
+        /// <summary> Query returning the number of columns named @column in table @table </summary>
+        protected abstract string ColumnExistsSql { get; }
+        /// <summary> Adds the GroupName column to a regions table created before it existed </summary>
+        protected abstract string AddGroupColumnSql { get; }
         protected virtual string ConnectionInitSql => null;
 
         protected abstract DbConnection CreateConnection();
@@ -26,7 +30,8 @@ namespace SmartRegions
         /// </summary>
         public static DBConnection Open()
         {
-            bool useMySql = TShock.Config.Settings.StorageType.Equals("mysql", StringComparison.OrdinalIgnoreCase);
+            bool useMySql = TShock.Config.Settings.StorageType.Equals(
+                "mysql", StringComparison.OrdinalIgnoreCase);
             DBConnection store = useMySql ? new MySqlDBConnection() : new SqliteDBConnection(readOnly: false);
             DBConnection other = null;
             if (useMySql && SqliteDBConnection.Exists)
@@ -70,15 +75,21 @@ namespace SmartRegions
         {
             var result = new List<SmartRegion>();
             using var connection = OpenConnection();
-            using var command = Command(connection, null, $"SELECT Name, Command, Cooldown FROM {RegionsTable}");
+            // A legacy SQLite store opened read-only to migrate from may not have the column
+            string groupColumn = ColumnExists(connection, RegionsTable, "GroupName") ? "GroupName" : "NULL";
+            using var command = Command(
+                connection, null, $"SELECT Name, Command, Cooldown, {groupColumn} FROM {RegionsTable}");
             using (var reader = command.ExecuteReader())
             {
                 while (reader.Read())
                 {
-                    string name = reader.GetString(0);
-                    string cmd = reader.GetString(1);
-                    double cooldown = reader.GetDouble(2);
-                    result.Add(new SmartRegion { name = name, command = cmd, cooldown = cooldown });
+                    result.Add(new SmartRegion
+                    {
+                        name = reader.GetString(0),
+                        command = reader.GetString(1),
+                        cooldown = reader.GetDouble(2),
+                        group = reader.IsDBNull(3) ? null : reader.GetString(3)
+                    });
                 }
             }
             return result;
@@ -122,6 +133,16 @@ namespace SmartRegions
             {
                 using var command = Command(connection, null, sql);
                 command.ExecuteNonQuery();
+            }
+            if (!ColumnExists(connection, RegionsTable, "GroupName"))
+            {
+                try
+                {
+                    using var command = Command(connection, null, AddGroupColumnSql);
+                    command.ExecuteNonQuery();
+                }
+                // Another server sharing the store may have added it first
+                catch (DbException) when (ColumnExists(connection, RegionsTable, "GroupName")) { }
             }
         }
 
@@ -173,11 +194,20 @@ namespace SmartRegions
             return Convert.ToInt64(command.ExecuteScalar()) > 0;
         }
 
+        bool ColumnExists(DbConnection connection, string table, string column)
+        {
+            using var command = Command(
+                connection, null, ColumnExistsSql, ("@table", table), ("@column", column));
+            return Convert.ToInt64(command.ExecuteScalar()) > 0;
+        }
+
         DbCommand UpsertCommand(DbConnection connection, DbTransaction transaction, SmartRegion region)
         {
             return Command(connection, transaction,
-                $"REPLACE INTO {RegionsTable} (Name, Command, Cooldown) VALUES (@nm, @cmd, @cool)",
-                ("@nm", region.name), ("@cmd", region.command), ("@cool", region.cooldown));
+                $"REPLACE INTO {RegionsTable} (Name, Command, Cooldown, GroupName) " +
+                "VALUES (@nm, @cmd, @cool, @group)",
+                ("@nm", region.name), ("@cmd", region.command), ("@cool", region.cooldown),
+                ("@group", (object)region.group ?? DBNull.Value));
         }
 
         DbCommand SetLastUpdateCommand(DbConnection connection, DbTransaction transaction, DateTime time)
@@ -187,7 +217,9 @@ namespace SmartRegions
                 ("@time", WholeSeconds(time)));
         }
 
-        /// <summary> Times are stored in whole seconds so they survive a round trip through either store </summary>
+        /// <summary>
+        /// Times are stored in whole seconds so they survive a round trip through either store
+        /// </summary>
         protected static DateTime WholeSeconds(DateTime time)
         {
             return new DateTime(time.Ticks - time.Ticks % TimeSpan.TicksPerSecond, DateTimeKind.Utc);
